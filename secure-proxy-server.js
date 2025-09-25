@@ -153,6 +153,8 @@ app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         
+        console.log('Login attempt:', { username });
+
         if (!username || !password) {
             return res.status(400).json({
                 success: false,
@@ -162,6 +164,7 @@ app.post('/api/login', async (req, res) => {
 
         // 1) Try environment admin credentials
         if (username === AUTH_CREDENTIALS.username && password === AUTH_CREDENTIALS.password) {
+            console.log('Admin login successful:', username);
             req.session.authenticated = true;
             req.session.username = username;
             return res.json({ success: true, message: 'Login successful' });
@@ -169,16 +172,25 @@ app.post('/api/login', async (req, res) => {
 
         // 2) Try users.json
         const users = loadUsers();
+        console.log('Loaded users:', users.map(u => u.username));
+        
         const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
         if (user) {
+            console.log('User found:', user.username);
             const ok = await bcrypt.compare(password, user.passwordHash);
             if (ok) {
+                console.log('User login successful:', user.username);
                 req.session.authenticated = true;
                 req.session.username = user.username;
                 return res.json({ success: true, message: 'Login successful' });
+            } else {
+                console.log('Password mismatch for user:', user.username);
             }
+        } else {
+            console.log('User not found:', username);
         }
 
+        console.log('Login failed for:', username);
         res.status(401).json({ success: false, message: 'Invalid credentials' });
     } catch (error) {
         console.error('Login error:', error);
@@ -245,6 +257,16 @@ app.get('/api/auth-status', (req, res) => {
     res.json({
         authenticated: !!req.session.authenticated,
         username: req.session.username || null
+    });
+});
+
+// Debug endpoint to check users (remove in production)
+app.get('/api/debug/users', (req, res) => {
+    const users = loadUsers();
+    res.json({ 
+        users: users.map(u => ({ username: u.username, createdAt: u.createdAt })),
+        inviteCode: INVITE_CODE,
+        adminUsername: AUTH_CREDENTIALS.username
     });
 });
 
