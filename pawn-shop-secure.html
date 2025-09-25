@@ -616,10 +616,30 @@
                 recognition.interimResults = false;
                 recognition.lang = 'en-US';
                 recognition.maxAlternatives = 1;
+                
+                // Mobile-specific settings
+                if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                    console.log('Configuring speech recognition for mobile');
+                    recognition.continuous = true; // Sometimes works better on mobile
+                    recognition.interimResults = true; // Show partial results
+                }
 
                 recognition.onresult = function(event) {
-                    const transcript = event.results[0][0].transcript;
-                    if (currentField) {
+                    console.log('Speech recognition result:', event);
+                    let transcript = '';
+                    
+                    // Handle both final and interim results
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        if (event.results[i].isFinal) {
+                            transcript = event.results[i][0].transcript;
+                            break;
+                        } else {
+                            // Use interim result if no final result yet
+                            transcript = event.results[i][0].transcript;
+                        }
+                    }
+                    
+                    if (currentField && transcript) {
                         const field = document.getElementById(currentField);
                         if (field) {
                             field.value = transcript;
@@ -668,6 +688,8 @@
 
         // Start voice input for a specific field
         function startVoiceInput(fieldId) {
+            console.log('Starting voice input for field:', fieldId);
+            
             // Check HTTPS requirement for mobile
             if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
                 showStatus('❌ Voice input requires HTTPS on mobile devices. Please use the secure version of this site.', 'error');
@@ -685,6 +707,53 @@
                 initSpeechRecognition();
             }
 
+            // For mobile devices, try a different approach
+            if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                console.log('Mobile device detected, using mobile-specific approach');
+                startMobileVoiceInput(fieldId);
+            } else {
+                // Desktop approach
+                startDesktopVoiceInput(fieldId);
+            }
+        }
+
+        // Mobile-specific voice input
+        function startMobileVoiceInput(fieldId) {
+            // First, try to get microphone permission
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then((stream) => {
+                        console.log('Microphone permission granted on mobile');
+                        // Stop the stream immediately as we just needed permission
+                        stream.getTracks().forEach(track => track.stop());
+                        
+                        // Now start recognition
+                        startRecognition(fieldId);
+                    })
+                    .catch((error) => {
+                        console.error('Mobile microphone permission error:', error);
+                        let errorMsg = '❌ Microphone access denied. ';
+                        
+                        if (error.name === 'NotAllowedError') {
+                            errorMsg += 'Please tap "Allow" when prompted for microphone access, or go to browser settings and enable microphone permission for this site.';
+                        } else if (error.name === 'NotFoundError') {
+                            errorMsg += 'No microphone found. Please connect a microphone.';
+                        } else if (error.name === 'NotSupportedError') {
+                            errorMsg += 'Microphone not supported on this device.';
+                        } else {
+                            errorMsg += 'Please check your browser settings and allow microphone access.';
+                        }
+                        
+                        showStatus(errorMsg, 'error');
+                    });
+            } else {
+                // Fallback - try direct recognition
+                startRecognition(fieldId);
+            }
+        }
+
+        // Desktop voice input
+        function startDesktopVoiceInput(fieldId) {
             // Check if microphone permission is available
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 navigator.mediaDevices.getUserMedia({ audio: true })
@@ -879,10 +948,36 @@
             }
         });
 
+        // Debug function to check mobile capabilities
+        function debugMobileCapabilities() {
+            console.log('=== Mobile Debug Info ===');
+            console.log('User Agent:', navigator.userAgent);
+            console.log('Is Mobile:', /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+            console.log('Protocol:', location.protocol);
+            console.log('Hostname:', location.hostname);
+            console.log('Speech Recognition Support:', 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+            console.log('MediaDevices Support:', !!navigator.mediaDevices);
+            console.log('getUserMedia Support:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+            
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(() => {
+                        console.log('✅ Microphone permission: GRANTED');
+                    })
+                    .catch((error) => {
+                        console.log('❌ Microphone permission:', error.name, error.message);
+                    });
+            }
+            console.log('========================');
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             checkAuthStatus();
             initSpeechRecognition();
+            
+            // Debug mobile capabilities
+            debugMobileCapabilities();
             
             // Add click handlers to voice buttons (with mobile touch support)
             document.querySelectorAll('.voice-btn').forEach(button => {
