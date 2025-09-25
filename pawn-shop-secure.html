@@ -620,33 +620,40 @@
                 // Mobile-specific settings
                 if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
                     console.log('Configuring speech recognition for mobile');
-                    recognition.continuous = true; // Sometimes works better on mobile
-                    recognition.interimResults = true; // Show partial results
+                    recognition.continuous = false; // Changed back to false for better mobile compatibility
+                    recognition.interimResults = false; // Disable interim results for cleaner mobile experience
+                    recognition.maxAlternatives = 3; // Try multiple alternatives
                 }
 
                 recognition.onresult = function(event) {
                     console.log('Speech recognition result:', event);
+                    console.log('Results length:', event.results.length);
+                    console.log('Result index:', event.resultIndex);
+                    
                     let transcript = '';
                     
-                    // Handle both final and interim results
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        if (event.results[i].isFinal) {
-                            transcript = event.results[i][0].transcript;
-                            break;
-                        } else {
-                            // Use interim result if no final result yet
-                            transcript = event.results[i][0].transcript;
+                    // Get the best result
+                    if (event.results && event.results.length > 0) {
+                        const result = event.results[event.results.length - 1];
+                        if (result && result[0]) {
+                            transcript = result[0].transcript;
+                            console.log('Final transcript:', transcript);
                         }
                     }
                     
-                    if (currentField && transcript) {
+                    if (currentField && transcript && transcript.trim()) {
                         const field = document.getElementById(currentField);
                         if (field) {
-                            field.value = transcript;
+                            field.value = transcript.trim();
                             field.dispatchEvent(new Event('input', { bubbles: true }));
+                            console.log('Text set in field:', currentField, 'Value:', transcript.trim());
                         }
                         stopVoiceInput();
-                        showStatus('✅ Voice input received!', 'success');
+                        showStatus('✅ Voice input received: "' + transcript.trim() + '"', 'success');
+                    } else {
+                        console.log('No transcript received or empty transcript');
+                        showStatus('❌ No speech detected. Please try again.', 'error');
+                        stopVoiceInput();
                     }
                 };
 
@@ -654,32 +661,49 @@
                     console.error('Speech recognition error:', event.error);
                     stopVoiceInput();
                     
-                    let errorMessage = 'Voice input failed. ';
+                    let errorMessage = 'Voice input error: ';
                     switch(event.error) {
                         case 'no-speech':
-                            errorMessage += 'No speech detected. Please try again.';
+                            errorMessage = 'No speech detected. Please speak clearly and try again.';
                             break;
                         case 'audio-capture':
-                            errorMessage += 'Microphone not found. Please check your microphone.';
+                            errorMessage = 'Microphone not found or not accessible. Please check your microphone.';
                             break;
                         case 'not-allowed':
-                            errorMessage += 'Microphone access denied. Please allow microphone access.';
+                            errorMessage = 'Microphone permission denied. Please allow microphone access in browser settings.';
                             break;
                         case 'network':
-                            errorMessage += 'Network error. Please check your connection.';
+                            errorMessage = 'Network error. Please check your internet connection.';
+                            break;
+                        case 'service-not-allowed':
+                            errorMessage = 'Speech service not allowed. Please check browser settings.';
+                            break;
+                        case 'bad-grammar':
+                            errorMessage = 'Speech recognition grammar error. Please try again.';
+                            break;
+                        case 'language-not-supported':
+                            errorMessage = 'Language not supported. Please try speaking in English.';
                             break;
                         default:
-                            errorMessage += 'Please try again.';
+                            errorMessage = `Voice input error: ${event.error}. Please try again.`;
                     }
+                    
                     showStatus(`❌ ${errorMessage}`, 'error');
                 };
 
                 recognition.onend = function() {
+                    console.log('Speech recognition ended');
                     stopVoiceInput();
                 };
 
                 recognition.onstart = function() {
                     console.log('Speech recognition started');
+                };
+
+                recognition.onnomatch = function() {
+                    console.log('No speech match found');
+                    showStatus('❌ No speech match found. Please speak more clearly.', 'error');
+                    stopVoiceInput();
                 };
             } else {
                 console.log('Speech recognition not supported');
@@ -795,12 +819,25 @@
                 button.classList.add('listening');
                 button.textContent = '🔴';
             }
+
+            console.log('Starting recognition for field:', fieldId);
+            
+            // Add timeout for mobile devices (10 seconds)
+            const timeout = setTimeout(() => {
+                console.log('Speech recognition timeout');
+                showStatus('❌ Speech recognition timeout. Please try again.', 'error');
+                stopVoiceInput();
+            }, 10000);
+
+            // Store timeout ID to clear it if recognition ends normally
+            recognition._timeout = timeout;
             
             try {
                 recognition.start();
-                showStatus('🎤 Listening... Speak now', 'success');
+                showStatus('🎤 Listening... Speak now!', 'success');
             } catch (error) {
                 console.error('Failed to start recognition:', error);
+                clearTimeout(timeout);
                 stopVoiceInput();
                 showStatus('❌ Voice input not available. Please try again.', 'error');
             }
@@ -808,6 +845,12 @@
 
         // Stop voice input
         function stopVoiceInput() {
+            // Clear timeout if it exists
+            if (recognition && recognition._timeout) {
+                clearTimeout(recognition._timeout);
+                recognition._timeout = null;
+            }
+            
             if (recognition && recognition.state !== 'inactive') {
                 try {
                     recognition.stop();
