@@ -193,8 +193,11 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/signup', async (req, res) => {
     try {
         const { username, password, inviteCode } = req.body;
+        
+        console.log('Signup attempt:', { username, inviteCode: inviteCode ? 'provided' : 'missing' });
 
         if (!inviteCode || inviteCode !== INVITE_CODE) {
+            console.log('Invalid invite code:', inviteCode, 'Expected:', INVITE_CODE);
             return res.status(403).json({ success: false, message: 'Invalid invite code' });
         }
 
@@ -204,6 +207,7 @@ app.post('/api/signup', async (req, res) => {
 
         const users = loadUsers();
         if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+            console.log('Username already exists:', username);
             return res.status(409).json({ success: false, message: 'Username already exists' });
         }
 
@@ -211,7 +215,8 @@ app.post('/api/signup', async (req, res) => {
         const newUser = { username, passwordHash, createdAt: new Date().toISOString() };
         users.push(newUser);
         saveUsers(users);
-
+        
+        console.log('New user created:', username);
         res.json({ success: true, message: 'Signup successful. You can now log in.' });
     } catch (error) {
         console.error('Signup error:', error);
