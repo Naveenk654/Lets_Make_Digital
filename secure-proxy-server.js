@@ -289,21 +289,25 @@ function validateFormData(data) {
 
 // Serve the secure form (requires authentication)
 app.get('/', requireAuth, (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'pawn-shop-secure.html'));
 });
 
 // Explicitly protect direct access to the secure HTML file
 app.get('/pawn-shop-secure.html', requireAuth, (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'pawn-shop-secure.html'));
 });
 
 // Serve login page
 app.get('/login', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'login.html'));
 });
 
 // Serve signup page
 app.get('/signup', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'signup.html'));
 });
 
@@ -383,6 +387,16 @@ app.get('/api/health', (req, res) => {
         message: 'Secure proxy server running',
         authenticated: !!req.session.authenticated
     });
+});
+
+// Fallback route - redirect to login if no route matches
+app.get('*', (req, res) => {
+    if (req.session.authenticated) {
+        res.setHeader('Content-Type', 'text/html');
+        res.sendFile(path.join(__dirname, 'pawn-shop-secure.html'));
+    } else {
+        res.redirect('/login');
+    }
 });
 
 app.listen(PORT, () => {
