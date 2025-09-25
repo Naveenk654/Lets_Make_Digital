@@ -53,15 +53,41 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        secure: false, // Set to false for Vercel deployment
         httpOnly: true,
-        maxAge: 2 * 60 * 60 * 1000 // 2 hours (was 24 hours)
+        maxAge: 2 * 60 * 60 * 1000, // 2 hours
+        sameSite: 'lax' // Add sameSite for better compatibility
     }
 }));
 
 // Enable CORS for specific origins only
 const corsOptions = {
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        // Allow localhost and Vercel domains
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'https://localhost:3000',
+            /^https:\/\/.*\.vercel\.app$/,
+            /^https:\/\/.*\.vercel\.dev$/
+        ];
+        
+        const isAllowed = allowedOrigins.some(allowedOrigin => {
+            if (typeof allowedOrigin === 'string') {
+                return origin === allowedOrigin;
+            } else {
+                return allowedOrigin.test(origin);
+            }
+        });
+        
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     optionsSuccessStatus: 200
 };
